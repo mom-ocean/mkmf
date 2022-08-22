@@ -83,12 +83,12 @@ FPPFLAGS := $(INCLUDES)
 FPPFLAGS += $(shell nf-config --fflags)
 
 # Base set of Fortran compiler flags
-FFLAGS := -fcray-pointer -fdefault-real-8 -fdefault-double-8 -Waliasing -ffree-line-length-none -fno-range-check
+FFLAGS := -g -fbacktrace -fcray-pointer -fdefault-real-8 -fdefault-double-8 -Waliasing -ffree-line-length-none -fno-range-check
 
 # Flags based on perforance target (production (OPT), reproduction (REPRO), or debug (DEBUG)
 FFLAGS_OPT = -O2 -fno-expensive-optimizations
 FFLAGS_REPRO =
-FFLAGS_DEBUG = -O0 -g -W -fbounds-check -ffpe-trap=invalid,zero,overflow
+FFLAGS_DEBUG = -O0 -W -fbounds-check -ffpe-trap=invalid,zero,overflow
 
 # Flags to add additional build options
 FFLAGS_OPENMP = -fopenmp

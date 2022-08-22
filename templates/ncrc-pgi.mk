@@ -91,12 +91,12 @@ FPPFLAGS := $(INCLUDES)
 FPPFLAGS += $(shell nf-config --fflags)
 
 # Base set of Fortran compiler flags
-FFLAGS = -i4 -r8 -byteswapio -Mcray=pointer -Mcray=pointer -Mflushz -Mdaz -D_F2000
+FFLAGS = -g -traceback -i4 -r8 -byteswapio -Mcray=pointer -Mcray=pointer -Mflushz -Mdaz -D_F2000
 
 # Flags based on perforance target (production (OPT), reproduction (REPRO), or debug (DEBUG)
 FFLAGS_OPT = -O3 -Mvect=nosse -Mnoscalarsse -Mallocatable=95
 FFLAGS_REPRO = -O2 -Mvect=nosse -Mnoscalarsse $(NOFMA)
-FFLAGS_DEBUG = -O0 -g -traceback -Ktrap=fp
+FFLAGS_DEBUG = -O0 -Ktrap=fp
 
 # Flags to add additional build options
 FFLAGS_OPENMP = -mp
