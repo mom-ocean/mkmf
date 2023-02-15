@@ -84,8 +84,6 @@ FPPFLAGS += $(shell nf-config --fflags)
 
 # Base set of Fortran compiler flags
 FFLAGS := -fcray-pointer -fdefault-real-8 -fdefault-double-8 -Waliasing -ffree-line-length-none -fno-range-check
-# GCC 10 legacy support
-FFLAGS += -fallow-invalid-boz -fallow-argument-mismatch
 
 # Flags based on perforance target (production (OPT), reproduction (REPRO), or debug (DEBUG)
 FFLAGS_OPT = -O2 -fno-expensive-optimizations
