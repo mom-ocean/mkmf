@@ -49,9 +49,12 @@ NETCDF =             # If value is '3' and CPPDEFS contains
 INCLUDES =           # A list of -I Include directories to be added to the
                      # the compile command.
 
-SSE = -xsse2         # The SSE options to be used to compile.  If blank,
-                     # than use the default SSE settings for the host.
-                     # Current default is to use SSE2.
+ISA = -xHost -qno-opt-dynamic-align
+                     # The Intel Instruction Set Archetecture (ISA) compile
+                     # option to use.  If blank, then use the default SSE
+                     # settings for the host.  Current default is to use
+                     # the highest instruction set on the compilation host
+                     # and disable dynamic data alignment.
 
 COVERAGE =           # Add the code coverage compile options.
 
@@ -158,9 +161,9 @@ FFLAGS += $(FFLAGS_OPENMP)
 LDFLAGS += $(LDFLAGS_OPENMP)
 endif
 
-ifdef SSE
-CFLAGS += $(SSE)
-FFLAGS += $(SSE)
+ifdef ISA
+CFLAGS += $(ISA)
+FFLAGS += $(ISA)
 endif
 
 ifdef NO_OVERRIDE_LIMITS
