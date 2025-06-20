@@ -1,4 +1,4 @@
-# Template for the GNU Compiler Collection on a Cray System
+# Template for the PGI Compilers on a Cray System
 #
 # Typical use with mkmf
 # mkmf -t ncrc-cray.mk -c"-Duse_libMPI -Duse_netCDF" path_names /usr/local/include
@@ -42,10 +42,13 @@ NETCDF =             # If value is '3' and CPPDEFS contains
                      # '-Duse_netCDF', then the additional cpp macro
                      # '-Duse_LARGEFILE' is added to the CPPDEFS macro.
 
-INCLUDES =           # A list of -I Include directories to be added to the
+                     # A list of -I Include directories to be added to the
                      # the compile command.
+INCLUDES := $(shell pkg-config --cflags yaml-0.1)
 
 COVERAGE =           # Add the code coverage compile options.
+
+USE_R4 =             # If non-blank, use R4 for reals
 
 # Need to use at least GNU Make version 3.81
 need := 3.81
@@ -68,13 +71,26 @@ $(error Options DEBUG and TEST cannot be used together)
 endif
 endif
 
-MAKEFLAGS += --jobs=$(shell grep '^processor' /proc/cpuinfo | wc -l)
+ifdef USE_R4
+REAL_PRECISION := -r4
+CPPDEFS += -DOVERLOAD_R4
+else
+REAL_PRECISION := -r8
+endif
+
+# Check version of PGI for use of -nofma option
+has_nofma := $(shell $(FC) -dryrun -nofma foo.f90 > /dev/null 2>&1; echo $$?)
+ifneq ($(has_nofma),0)
+NOFMA :=
+else
+NOFMA := -nofma
+endif
 
 # Required Preprocessor Macros:
 CPPDEFS += -Duse_netCDF
 
 # Additional Preprocessor Macros needed due to  Autotools and CMake
-CPPDEFS += -DHAVE_SCHED_GETAFFINITY
+CPPDEFS += -DHAVE_SCHED_GETAFFINITY -DHAVE_GETTID
 
 # Macro for Fortran preprocessor
 FPPFLAGS := $(INCLUDES)
@@ -82,36 +98,34 @@ FPPFLAGS := $(INCLUDES)
 FPPFLAGS += $(shell nf-config --fflags)
 
 # Base set of Fortran compiler flags
-FFLAGS := -fcray-pointer -fdefault-real-8 -fdefault-double-8 -Waliasing -ffree-line-length-none -fno-range-check
-# GCC 10 legacy support
-FFLAGS += -fallow-invalid-boz -fallow-argument-mismatch
+FFLAGS = -i4 $(REAL_PRECISION) -byteswapio -Mcray=pointer -Mcray=pointer -Mflushz -Mdaz -D_F2000
 
 # Flags based on perforance target (production (OPT), reproduction (REPRO), or debug (DEBUG)
-FFLAGS_OPT = -O2 -fno-expensive-optimizations
-FFLAGS_REPRO =
-FFLAGS_DEBUG = -O0 -g -W -fbounds-check -ffpe-trap=invalid,zero,overflow
+FFLAGS_OPT = -O3 -Mvect=nosse -Mnoscalarsse -Mallocatable=95
+FFLAGS_REPRO = -O2 -Mvect=nosse -Mnoscalarsse $(NOFMA)
+FFLAGS_DEBUG = -O0 -g -traceback -Ktrap=fp
 
 # Flags to add additional build options
-FFLAGS_OPENMP = -fopenmp
-FFLAGS_VERBOSE = -Wall -Wextra
+FFLAGS_OPENMP = -mp
+FFLAGS_VERBOSE = -v -Minform=inform
 FFLAGS_COVERAGE =
 
 # Macro for C preprocessor
-CPPFLAGS := -D__IFC $(INCLUDES)
+CPPFLAGS := $(INCLUDES)
 # C Compiler flags for the NetCDF library
 CPPFLAGS += $(shell nc-config --cflags)
 
 # Base set of C compiler flags
-CFLAGS :=
+CFLAGS =
 
 # Flags based on perforance target (production (OPT), reproduction (REPRO), or debug (DEBUG)
 CFLAGS_OPT = -O2
 CFLAGS_REPRO = -O2
-CFLAGS_DEBUG = -O0 -g
+CFLAGS_DEBUG = -O0 -g -traceback -Ktrap=fp
 
 # Flags to add additional build options
-CFLAGS_OPENMP = -fopenmp
-CFLAGS_VERBOSE = -Wall -Wextra
+CFLAGS_OPENMP = -mp
+CFLAGS_VERBOSE = -v -Minform=inform
 CFLAGS_COVERAGE =
 
 # Optional Testing compile flags.  Mutually exclusive from DEBUG, REPRO, and OPT
@@ -120,13 +134,13 @@ FFLAGS_TEST := $(FFLAGS_OPT)
 CFLAGS_TEST := $(CFLAGS_OPT)
 
 # Linking flags
-LDFLAGS :=
-LDFLAGS_OPENMP := -fopenmp
-LDFLAGS_VERBOSE :=
+LDFLAGS := -byteswapio
+LDFLAGS_OPENMP :=
+LDFLAGS_VERBOSE := -v
 LDFLAGS_COVERAGE :=
 
-# Start with a blank LIBS
-LIBS =
+# List of -L library directories to be added to the compile and linking commands
+LIBS := $(shell pkg-config --libs yaml-0.1)
 
 # Get compile flags based on target macros.
 ifdef REPRO
@@ -157,7 +171,9 @@ endif
 
 ifeq ($(NETCDF),3)
   # add the use_LARGEFILE cppdef
-  CPPDEFS += -Duse_LARGEFILE
+  ifneq ($(findstring -Duse_netCDF,$(CPPDEFS)),)
+    CPPDEFS += -Duse_LARGEFILE
+  endif
 endif
 
 ifdef COVERAGE
@@ -169,6 +185,8 @@ FFLAGS += $(FFLAGS_COVERAGE) $(PROF_DIR)
 LDFLAGS += $(LDFLAGS_COVERAGE) $(PROF_DIR)
 endif
 
+# These Algebra libraries Add solution to more complex vector matrix model equations
+LIBS += -llapack -lblas
 LDFLAGS += $(LIBS)
 
 #---------------------------------------------------------------------------
@@ -191,7 +209,6 @@ LDFLAGS += $(LIBS)
 # The macro TMPFILES is provided to slate files like the above for removal.
 
 RM = rm -f
-SHELL = /bin/csh -f
 TMPFILES = .*.m *.B *.L *.i *.i90 *.l *.s *.mod *.opt
 
 .SUFFIXES: .F .F90 .H .L .T .f .f90 .h .i .i90 .l .o .s .opt .x

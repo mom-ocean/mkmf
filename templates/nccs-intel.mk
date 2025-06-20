@@ -55,6 +55,8 @@ SSE = -march=core-avx2  # The SSE options to be used to compile.  If blank,
 
 COVERAGE =           # Add the code coverage compile options.
 
+USE_R4 =             # If non-blank, use R4 for reals
+
 # Need to use at least GNU Make version 3.81
 need := 3.81
 ok := $(filter $(need),$(firstword $(sort $(MAKE_VERSION) $(need))))
@@ -76,7 +78,12 @@ $(error Options DEBUG and TEST cannot be used together)
 endif
 endif
 
-MAKEFLAGS += --jobs=$(shell grep '^processor' /proc/cpuinfo | wc -l)
+ifdef USE_R4
+REAL_PRECISION := -real-size 32
+CPPDEFS += -DOVERLOAD_R4
+else
+REAL_PRECISION := -real-size 64
+endif
 
 # Required Preprocessor Macros:
 CPPDEFS += -Duse_netCDF
@@ -90,7 +97,7 @@ FPPFLAGS = -fpp -Wp,-w $(INCLUDES)
 FPPFLAGS += $(shell nf-config --fflags)
 
 # Base set of Fortran compiler flags
-FFLAGS := -fno-alias -auto -safe-cray-ptr -ftz -assume byterecl -i4 -r8 -nowarn -sox -traceback
+FFLAGS := -fno-alias -auto -safe-cray-ptr -ftz -assume byterecl -i4 $(REAL_PRECISION) -nowarn -sox -traceback
 
 # Flags based on perforance target (production (OPT), reproduction (REPRO), or debug (DEBUG)
 FFLAGS_OPT = -O3 -debug minimal -fp-model source
@@ -209,7 +216,6 @@ LDFLAGS += $(LIBS)
 # The macro TMPFILES is provided to slate files like the above for removal.
 
 RM = rm -f
-SHELL = /bin/csh -f
 TMPFILES = .*.m *.B *.L *.i *.i90 *.l *.s *.mod *.opt
 
 .SUFFIXES: .F .F90 .H .L .T .f .f90 .h .i .i90 .l .o .s .opt .x

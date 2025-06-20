@@ -1,15 +1,14 @@
-# Template for the GNU Compiler Collection on Trusty version of Ubuntu Linux systems (used by Travis-CI)
+# Template for the Intel Compilers on a Cray System
 #
 # Typical use with mkmf
-# mkmf -t linux-ubuntu-xenial-gnu.mk -c"-Duse_libMPI -Duse_netCDF" path_names /usr/local/include
-#
-# Designed to work on Ubuntu-16
+# mkmf -t ncrc-cray.mk -c"-Duse_libMPI -Duse_netCDF" path_names /usr/local/include
 
 ############
-# Commands Macors
-FC = mpif90
-CC = mpicc
-LD = mpif90 $(MAIN_PROGRAM)
+# Commands Macros
+############
+FC = mpiifx
+CC = mpiicx
+LD = mpiifx
 
 #######################
 # Build target macros
@@ -37,22 +36,27 @@ TEST  =              # If non-blank, use the compiler options defined in
 VERBOSE =            # If non-blank, add additional verbosity compiler
                      # options
 
+USE_LTO =            # Enable link-time optimization
+
 OPENMP =             # If non-blank, compile with openmp enabled
 
 NO_OVERRIDE_LIMITS = # If non-blank, do not use the -qoverride-limits
                      # compiler option.  Default behavior is to compile
                      # with -qoverride-limits.
 
+STATIC =             # If non-blank do a static build
+
 NETCDF =             # If value is '3' and CPPDEFS contains
                      # '-Duse_netCDF', then the additional cpp macro
                      # '-Duse_LARGEFILE' is added to the CPPDEFS macro.
 
-INCLUDES =           # A list of -I Include directories to be added to the
+                     # A list of -I Include directories to be added to the
                      # the compile command.
+INCLUDES := $(shell pkg-config --cflags hdf5_fortran) $(shell nf-config --flibs) $(shell nc-config --cflags) $(shell nf-config --fflags) -I/opt/views/view/include
 
-SSE =                # The SSE options to be used to compile.  If blank,
-                     # than use the default SSE settings for the host.
-                     # Current default is to use SSE2.
+                     # The Intel Instruction Set Archetecture (ISA) compile
+                     # option to use.
+ISA =
 
 COVERAGE =           # Add the code coverage compile options.
 
@@ -80,70 +84,81 @@ endif
 endif
 
 ifdef USE_R4
-REAL_PRECISION := -fdefault-real-4
+REAL_PRECISION := -real-size 32
 CPPDEFS += -DOVERLOAD_R4
 else
-REAL_PRECISION := -fdefault-real-8
+REAL_PRECISION := -real-size 64
 endif
 
 # Required Preprocessor Macros:
 CPPDEFS += -Duse_netCDF
 
 # Additional Preprocessor Macros needed due to  Autotools and CMake
-CPPDEFS += -DHAVE_SCHED_GETAFFINITY
+CPPDEFS += -DHAVE_GETTID -DHAVE_SCHED_GETAFFINITY
 
 # Macro for Fortran preprocessor
-FPPFLAGS := $(INCLUDES)
+FPPFLAGS := -fpp -Wp,-w $(INCLUDES)
 # Fortran Compiler flags for the NetCDF library
 FPPFLAGS += $(shell nf-config --fflags)
 
 # Base set of Fortran compiler flags
-FFLAGS := -fcray-pointer -fdefault-double-8 $(REAL_PRECISION) -Waliasing -ffree-line-length-none -fno-range-check
+FFLAGS := -fno-alias -auto -safe-cray-ptr -ftz -assume byterecl -i4 $(REAL_PRECISION) -nowarn -traceback
+
+# Set the ISA (vectorization) as user defined or based on the target
+ifdef ISA
+ISA_OPT = $(ISA)
+ISA_REPRO = $(ISA)
+ISA_DEBUG = $(ISA)
+else
+ISA_OPT = -march=core-avx-i
+ISA_REPRO = -march=core-avx-i
+ISA_DEBUG = -march=core-avx-i
+endif
 
 # Flags based on perforance target (production (OPT), reproduction (REPRO), or debug (DEBUG)
-FFLAGS_OPT = -O3
-FFLAGS_REPRO = -O2 -fbounds-check
-FFLAGS_DEBUG = -O0 -g -W -fbounds-check -fbacktrace -ffpe-trap=invalid,zero,overflow
+FFLAGS_OPT = -O3 -debug minimal -fp-model source $(ISA_OPT)
+FFLAGS_REPRO = -O2 -debug minimal -fp-model source $(ISA_REPRO)
+FFLAGS_DEBUG = -g -O0 -check -check noarg_temp_created -check nopointer -check nouninit -warn -warn noerrors -fpe0 -ftrapuv $(ISA_DEBUG)
 
 # Flags to add additional build options
-FFLAGS_OPENMP = -fopenmp
-FFLAGS_VERBOSE =
-FFLAGS_COVERAGE =
+FFLAGS_LTO = -flto
+FFLAGS_OPENMP = -qopenmp
+FFLAGS_OVERRIDE_LIMITS = -qoverride-limits
+FFLAGS_VERBOSE = -v -V -what -warn all -qopt-report-phase=vec -qopt-report=2
+FFLAGS_COVERAGE = -prof-gen=srcpos
 
 # Macro for C preprocessor
-CPPFLAGS = $(INCLUDES)
+CPPFLAGS := -D__IFC $(INCLUDES)
 # C Compiler flags for the NetCDF library
 CPPFLAGS += $(shell nc-config --cflags)
 
 # Base set of C compiler flags
-CFLAGS := -D__IFC
+CFLAGS := -sox -traceback
 
 # Flags based on perforance target (production (OPT), reproduction (REPRO), or debug (DEBUG)
-CFLAGS_OPT = -O2
-CFLAGS_REPRO = -O2
-CFLAGS_DEBUG = -O0 -g
+CFLAGS_OPT = -O2 -debug minimal $(ISA_OPT)
+CFLAGS_REPRO = -O2 -debug minimal $(ISA_REPRO)
+CFLAGS_DEBUG = -O0 -g $(ISA_DEBUG)
 
 # Flags to add additional build options
-CFLAGS_OPENMP = -fopenmp
-CFLAGS_VERBOSE =
-CFLAGS_COVERAGE =
+CFLAGS_LTO = -flto
+CFLAGS_OPENMP = -qopenmp
+CFLAGS_VERBOSE = -w3 -qopt-report-phase=vec -qopt-report=2
+CFLAGS_COVERAGE = -prof-gen=srcpos
 
 # Optional Testing compile flags.  Mutually exclusive from DEBUG, REPRO, and OPT
 # *_TEST will match the production if no new option(s) is(are) to be tested.
-FFLAGS_TEST = $(FFLAGS_OPT)
-CFLAGS_TEST = $(CFLAGS_OPT)
+FFLAGS_TEST := $(FFLAGS_OPT)
+CFLAGS_TEST := $(CFLAGS_OPT)
 
 # Linking flags
-LDFLAGS :=
-LDFLAGS_OPENMP := -fopenmp
-LDFLAGS_VERBOSE :=
-LDFLAGS_COVERAGE :=
+LDFLAGS := -fuse-ld=lld
+LDFLAGS_OPENMP := -qopenmp
+LDFLAGS_VERBOSE := -Wl,-V,--verbose,-cref,-M
+LDFLAGS_COVERAGE = -prof-gen=srcpos
 
-# Start with a blank LIBS
-LIBS =
-# NetCDF library flags
-LIBS += $(shell nc-config --libs)
-LIBS += $(shell nf-config --flibs)
+# List of -L library directories to be added to the compile and linking commands
+LIBS := -L/opt/views/view/lib -lyaml -lhdf5 -lhdf5_hl_fortran -lhdf5_hl -lhdf5_fortran $(shell nf-config --flibs) $(shell nc-config --libs)
 
 # Get compile flags based on target macros.
 ifdef REPRO
@@ -160,15 +175,16 @@ CFLAGS += $(CFLAGS_OPT)
 FFLAGS += $(FFLAGS_OPT)
 endif
 
+ifdef USE_LTO
+CFLAGS += $(CFLAGS_LTO)
+FFLAGS += $(FFLAGS_LTO)
+LDFLAGS += $(FFLAGS)
+endif
+
 ifdef OPENMP
 CFLAGS += $(CFLAGS_OPENMP)
 FFLAGS += $(FFLAGS_OPENMP)
 LDFLAGS += $(LDFLAGS_OPENMP)
-endif
-
-ifdef SSE
-CFLAGS += $(SSE)
-FFLAGS += $(SSE)
 endif
 
 ifdef NO_OVERRIDE_LIMITS
@@ -183,9 +199,7 @@ endif
 
 ifeq ($(NETCDF),3)
   # add the use_LARGEFILE cppdef
-  ifneq ($(findstring -Duse_netCDF,$(CPPDEFS)),)
-    CPPDEFS += -Duse_LARGEFILE
-  endif
+  CPPDEFS += -Duse_LARGEFILE
 endif
 
 ifdef COVERAGE
@@ -199,6 +213,10 @@ endif
 
 LDFLAGS += $(LIBS)
 
+ifdef STATIC
+  LDFLAGS += -static
+endif
+
 #---------------------------------------------------------------------------
 # you should never need to change any lines below.
 
@@ -208,13 +226,13 @@ LDFLAGS += $(LIBS)
 # .f, .f90, .F, .F90. Given a sourcefile <file>.<ext>, where <ext> is one of
 # the above, this provides a number of default actions:
 
-# make <file>.opt	create an optimization report
-# make <file>.o		create an object file
-# make <file>.s		create an assembly listing
-# make <file>.x		create an executable file, assuming standalone
-#			source
-# make <file>.i		create a preprocessed file (for .F)
-# make <file>.i90	create a preprocessed file (for .F90)
+# make <file>.opt       create an optimization report
+# make <file>.o         create an object file
+# make <file>.s         create an assembly listing
+# make <file>.x         create an executable file, assuming standalone
+#                       source
+# make <file>.i         create a preprocessed file (for .F)
+# make <file>.i90       create a preprocessed file (for .F90)
 
 # The macro TMPFILES is provided to slate files like the above for removal.
 

@@ -36,6 +36,8 @@ TEST  =              # If non-blank, use the compiler options defined in
 VERBOSE =            # If non-blank, add additional verbosity compiler
                      # options
 
+USE_LTO =            # Enable link-time optimization
+
 OPENMP =             # If non-blank, compile with openmp enabled
 
 NO_OVERRIDE_LIMITS = # If non-blank, do not use the -qoverride-limits
@@ -55,6 +57,8 @@ INCLUDES := $(shell pkg-config --cflags yaml-0.1)
 ISA =
 
 COVERAGE =           # Add the code coverage compile options.
+
+USE_R4 =             # If non-blank, use R4 for reals
 
 # Need to use at least GNU Make version 3.81
 need := 3.81
@@ -77,6 +81,13 @@ $(error Options DEBUG and TEST cannot be used together)
 endif
 endif
 
+ifdef USE_R4
+REAL_PRECISION := -real-size 32
+CPPDEFS += -DOVERLOAD_R4
+else
+REAL_PRECISION := -real-size 64
+endif
+
 # Required Preprocessor Macros:
 CPPDEFS += -Duse_netCDF
 
@@ -89,7 +100,7 @@ FPPFLAGS := -fpp -Wp,-w $(INCLUDES)
 FPPFLAGS += $(shell nf-config --fflags)
 
 # Base set of Fortran compiler flags
-FFLAGS := -fno-alias -auto -safe-cray-ptr -ftz -assume byterecl -i4 -r8 -nowarn -traceback
+FFLAGS := -g -fno-alias -auto -safe-cray-ptr -ftz -assume byterecl -i4 $(REAL_PRECISION) -nowarn -traceback
 
 # Set the ISA (vectorization) as user defined or based on the target
 ifdef ISA
@@ -105,9 +116,10 @@ endif
 # Flags based on perforance target (production (OPT), reproduction (REPRO), or debug (DEBUG)
 FFLAGS_OPT = -O3 -debug minimal -fp-model source $(ISA_OPT)
 FFLAGS_REPRO = -O2 -debug minimal -fp-model source $(ISA_REPRO)
-FFLAGS_DEBUG = -g -O0 -check -check noarg_temp_created -check nopointer -warn -warn noerrors -fpe0 -ftrapuv $(ISA_DEBUG)
+FFLAGS_DEBUG = -O0 -check -check noarg_temp_created -check nopointer -check nouninit -warn -warn noerrors -fpe0 -ftrapuv $(ISA_DEBUG)
 
 # Flags to add additional build options
+FFLAGS_LTO = -flto
 FFLAGS_OPENMP = -qopenmp
 FFLAGS_OVERRIDE_LIMITS = -qoverride-limits
 FFLAGS_VERBOSE = -v -V -what -warn all -qopt-report-phase=vec -qopt-report=2
@@ -127,6 +139,7 @@ CFLAGS_REPRO = -O2 -debug minimal $(ISA_REPRO)
 CFLAGS_DEBUG = -O0 -g $(ISA_DEBUG)
 
 # Flags to add additional build options
+CFLAGS_LTO = -flto
 CFLAGS_OPENMP = -qopenmp
 CFLAGS_VERBOSE = -w3 -qopt-report-phase=vec -qopt-report=2
 CFLAGS_COVERAGE = -prof-gen=srcpos
@@ -137,7 +150,7 @@ FFLAGS_TEST := $(FFLAGS_OPT)
 CFLAGS_TEST := $(CFLAGS_OPT)
 
 # Linking flags
-LDFLAGS :=
+LDFLAGS := -fuse-ld=lld
 LDFLAGS_OPENMP := -qopenmp
 LDFLAGS_VERBOSE := -Wl,-V,--verbose,-cref,-M
 LDFLAGS_COVERAGE = -prof-gen=srcpos
@@ -158,6 +171,12 @@ FFLAGS += $(FFLAGS_TEST)
 else
 CFLAGS += $(CFLAGS_OPT)
 FFLAGS += $(FFLAGS_OPT)
+endif
+
+ifdef USE_LTO
+CFLAGS += $(CFLAGS_LTO)
+FFLAGS += $(FFLAGS_LTO)
+LDFLAGS += $(FFLAGS)
 endif
 
 ifdef OPENMP

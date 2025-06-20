@@ -14,8 +14,14 @@ DEBUG =
 REPRO =
 VERBOSE =
 OPENMP =
+USE_R4 =             # If non-blank, use R4 for reals
 
-MAKEFLAGS += --jobs=$(shell grep '^processor' /proc/cpuinfo | wc -l)
+ifdef USE_R4
+REAL_PRECISION := -fdefault-double-4
+CPPDEFS += -DOVERLOAD_R4
+else
+REAL_PRECISION := -fdefault-double-8
+endif
 
 # Required Preprocessor Macros:
 CPPDEFS += -Duse_netCDF
@@ -25,7 +31,7 @@ CPPDEFS += -DHAVE_SCHED_GETAFFINITY
 
 FPPFLAGS :=
 
-FFLAGS :=-fcray-pointer -fdefault-double-8 -fdefault-real-8 -Waliasing -ffree-line-length-none -fno-range-check
+FFLAGS :=-fcray-pointer -fdefault-double-8 $(REAL_PRECISION) -Waliasing -ffree-line-length-none -fno-range-check
 FFLAGS += -I/usr/include
 FFLAGS += -I$(shell nf-config --includedir)
 FFLAGS += -DGFORTRAN -Duse_netCDF3
@@ -107,7 +113,6 @@ LIBS := $(shell nc-config --flibs)
 # The macro TMPFILES is provided to slate files like the above for removal.
 
 RM = rm -f
-SHELL = /bin/csh -f
 TMPFILES = .*.m *.B *.L *.i *.i90 *.l *.s *.mod *.opt
 
 .SUFFIXES: .F .F90 .H .L .T .f .f90 .h .i .i90 .l .o .s .opt .x

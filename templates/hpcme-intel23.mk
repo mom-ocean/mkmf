@@ -1,4 +1,4 @@
-# Template for the Cray CCE Compilers on a Cray System
+# Template for the Intel Compilers on a Cray System
 #
 # Typical use with mkmf
 # mkmf -t ncrc-cray.mk -c"-Duse_libMPI -Duse_netCDF" path_names /usr/local/include
@@ -6,9 +6,9 @@
 ############
 # Commands Macros
 ############
-FC = ftn
-CC = cc
-LD = ftn $(MAIN_PROGRAM)
+FC = mpiifort
+CC = mpiicc
+LD = mpiifort
 
 #######################
 # Build target macros
@@ -38,14 +38,27 @@ VERBOSE =            # If non-blank, add additional verbosity compiler
 
 OPENMP =             # If non-blank, compile with openmp enabled
 
+NO_OVERRIDE_LIMITS = # If non-blank, do not use the -qoverride-limits
+                     # compiler option.  Default behavior is to compile
+                     # with -qoverride-limits.
+
+STATIC =             # If non-blank do a static build
+
 NETCDF =             # If value is '3' and CPPDEFS contains
                      # '-Duse_netCDF', then the additional cpp macro
                      # '-Duse_LARGEFILE' is added to the CPPDEFS macro.
 
-INCLUDES =           # A list of -I Include directories to be added to the
+                     # A list of -I Include directories to be added to the
                      # the compile command.
+INCLUDES := $(shell pkg-config --cflags yaml-0.1) $(shell pkg-config --cflags hdf5) $(shell pkg-config --cflags hdf5_fortran) $(shell nf-config --flibs) $(shell nc-config --cflags) $(shell nf-config --fflags)
+
+                     # The Intel Instruction Set Archetecture (ISA) compile
+                     # option to use.
+ISA =
 
 COVERAGE =           # Add the code coverage compile options.
+
+USE_R4 =             # If non-blank, use R4 for reals
 
 # Need to use at least GNU Make version 3.81
 need := 3.81
@@ -68,49 +81,66 @@ $(error Options DEBUG and TEST cannot be used together)
 endif
 endif
 
-MAKEFLAGS += --jobs=$(shell grep '^processor' /proc/cpuinfo | wc -l)
+ifdef USE_R4
+REAL_PRECISION := -real-size 32
+CPPDEFS += -DOVERLOAD_R4
+else
+REAL_PRECISION := -real-size 64
+endif
 
 # Required Preprocessor Macros:
 CPPDEFS += -Duse_netCDF
 
 # Additional Preprocessor Macros needed due to  Autotools and CMake
-CPPDEFS += -DHAVE_SCHED_GETAFFINITY
+CPPDEFS += -DHAVE_GETTID -DHAVE_SCHED_GETAFFINITY
 
 # Macro for Fortran preprocessor
-FPPFLAGS := $(INCLUDES)
+FPPFLAGS := -fpp -Wp,-w $(INCLUDES)
 # Fortran Compiler flags for the NetCDF library
 FPPFLAGS += $(shell nf-config --fflags)
 
 # Base set of Fortran compiler flags
-FFLAGS = -s real64 -s integer32 -h byteswapio -h nosecond_underscore -e m -h keepfiles -e0 -ez -N1023
+FFLAGS := -fno-alias -auto -safe-cray-ptr -ftz -assume byterecl -i4 $(REAL_PRECISION) -nowarn -sox -traceback
+
+# Set the ISA (vectorization) as user defined or based on the target
+ifdef ISA
+ISA_OPT = $(ISA)
+ISA_REPRO = $(ISA)
+ISA_DEBUG = $(ISA)
+else
+ISA_OPT = -march=core-avx-i -qno-opt-dynamic-align
+ISA_REPRO = -march=core-avx-i -qno-opt-dynamic-align
+ISA_DEBUG = -march=core-avx-i -qno-opt-dynamic-align
+endif
 
 # Flags based on perforance target (production (OPT), reproduction (REPRO), or debug (DEBUG)
-FFLAGS_OPT = -O3 -O fp2 -G2
-FFLAGS_REPRO = -O2 -O fp2 -G2
-FFLAGS_DEBUG = -g -R bc
+FFLAGS_OPT = -O3 -debug minimal -fp-model source $(ISA_OPT)
+FFLAGS_REPRO = -O2 -debug minimal -fp-model source $(ISA_REPRO)
+FFLAGS_DEBUG = -g -O0 -check -check noarg_temp_created -check nopointer -warn -warn noerrors -fpe0 -ftrapuv $(ISA_DEBUG)
 
 # Flags to add additional build options
-FFLAGS_NOOPENMP = -h noomp
-FFLAGS_VERBOSE = -e o -v
-FFLAGS_COVERAGE =
+FFLAGS_OPENMP = -qopenmp
+FFLAGS_OVERRIDE_LIMITS = -qoverride-limits
+FFLAGS_VERBOSE = -v -V -what -warn all -qopt-report-phase=vec -qopt-report=2
+FFLAGS_COVERAGE = -prof-gen=srcpos
 
 # Macro for C preprocessor
-CPPFLAGS := $(INCLUDES)
+CPPFLAGS := -D__IFC $(INCLUDES)
 # C Compiler flags for the NetCDF library
 CPPFLAGS += $(shell nc-config --cflags)
 
 # Base set of C compiler flags
-CFLAGS =
+CFLAGS := -sox -traceback
 
 # Flags based on perforance target (production (OPT), reproduction (REPRO), or debug (DEBUG)
-CFLAGS_OPT = -O2
-CFLAGS_REPRO = -O2
-CFLAGS_DEBUG = -g
+CFLAGS_OPT = -O2 -debug minimal $(ISA_OPT)
+CFLAGS_REPRO = -O2 -debug minimal $(ISA_REPRO)
+CFLAGS_DEBUG = -O0 -g -ftrapuv $(ISA_DEBUG)
 
 # Flags to add additional build options
-CFLAGS_NOOPENMP = -h noomp
-CFLAGS_VERBOSE = -v -h display_opt
-CFLAGS_COVERAGE =
+CFLAGS_OPENMP = -qopenmp
+CFLAGS_VERBOSE = -w3 -qopt-report-phase=vec -qopt-report=2
+CFLAGS_COVERAGE = -prof-gen=srcpos
 
 # Optional Testing compile flags.  Mutually exclusive from DEBUG, REPRO, and OPT
 # *_TEST will match the production if no new option(s) is(are) to be tested.
@@ -118,13 +148,13 @@ FFLAGS_TEST := $(FFLAGS_OPT)
 CFLAGS_TEST := $(CFLAGS_OPT)
 
 # Linking flags
-LDFLAGS := -h byteswapio
-LDFLAGS_NOOPENMP :=
-LDFLAGS_VERBOSE := -v
-LDFLAGS_COVERAGE :=
+LDFLAGS :=
+LDFLAGS_OPENMP := -qopenmp
+LDFLAGS_VERBOSE := -Wl,-V,--verbose,-cref,-M
+LDFLAGS_COVERAGE = -prof-gen=srcpos
 
-# Start with a blank LIBS
-LIBS =
+# List of -L library directories to be added to the compile and linking commands
+LIBS := $(shell pkg-config --libs yaml-0.1) $(shell pkg-config --libs hdf5) $(shell pkg-config --libs hdf5_fortran) $(shell pkg-config --libs hdf5_hl) $(shell nf-config --flibs) $(shell nc-config --libs)
 
 # Get compile flags based on target macros.
 ifdef REPRO
@@ -141,10 +171,14 @@ CFLAGS += $(CFLAGS_OPT)
 FFLAGS += $(FFLAGS_OPT)
 endif
 
-ifndef OPENMP
-CFLAGS += $(CFLAGS_NOOPENMP)
-FFLAGS += $(FFLAGS_NOOPENMP)
-LDFLAGS += $(LDFLAGS_NOOPENMP)
+ifdef OPENMP
+CFLAGS += $(CFLAGS_OPENMP)
+FFLAGS += $(FFLAGS_OPENMP)
+LDFLAGS += $(LDFLAGS_OPENMP)
+endif
+
+ifdef NO_OVERRIDE_LIMITS
+FFLAGS += $(FFLAGS_OVERRIDE_LIMITS)
 endif
 
 ifdef VERBOSE
@@ -169,6 +203,10 @@ endif
 
 LDFLAGS += $(LIBS)
 
+ifdef STATIC
+  LDFLAGS += -static
+endif
+
 #---------------------------------------------------------------------------
 # you should never need to change any lines below.
 
@@ -178,13 +216,13 @@ LDFLAGS += $(LIBS)
 # .f, .f90, .F, .F90. Given a sourcefile <file>.<ext>, where <ext> is one of
 # the above, this provides a number of default actions:
 
-# make <file>.opt	create an optimization report
-# make <file>.o		create an object file
-# make <file>.s		create an assembly listing
-# make <file>.x		create an executable file, assuming standalone
-#			source
-# make <file>.i		create a preprocessed file (for .F)
-# make <file>.i90	create a preprocessed file (for .F90)
+# make <file>.opt       create an optimization report
+# make <file>.o         create an object file
+# make <file>.s         create an assembly listing
+# make <file>.x         create an executable file, assuming standalone
+#                       source
+# make <file>.i         create a preprocessed file (for .F)
+# make <file>.i90       create a preprocessed file (for .F90)
 
 # The macro TMPFILES is provided to slate files like the above for removal.
 
