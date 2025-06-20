@@ -90,12 +90,18 @@ FPPFLAGS := $(INCLUDES)
 FPPFLAGS += $(shell nf-config --fflags)
 
 # Base set of Fortran compiler flags
-FFLAGS := -fcray-pointer $(REAL_PRECISION) -fdefault-double-8 -Waliasing -ffree-line-length-none -fno-range-check -fallow-argument-mismatch
+FFLAGS := -g -fbacktrace -fcray-pointer -fdefault-real-8 -fdefault-double-8 \
+  -Waliasing -ffree-line-length-none -fno-range-check -fallow-argument-mismatch \
+  -fallow-invalid-boz
 
 # Flags based on perforance target (production (OPT), reproduction (REPRO), or debug (DEBUG)
 FFLAGS_OPT = -O2 -fno-expensive-optimizations
 FFLAGS_REPRO =
-FFLAGS_DEBUG = -O0 -g -W -fbounds-check -ffpe-trap=invalid,zero,overflow
+
+# In HDF5 1.14.3, certain operations trigger floating point exceptions.
+#   Until resolved, we must temporarily disable them.
+#FFLAGS_DEBUG = -O0 -W -fbounds-check -ffpe-trap=invalid,zero,overflow
+FFLAGS_DEBUG = -O0 -W -fbounds-check
 
 # Flags to add additional build options
 FFLAGS_OPENMP = -fopenmp
@@ -133,6 +139,10 @@ LDFLAGS_COVERAGE :=
 
 # List of -L library directories to be added to the compile and linking commands
 LIBS := $(shell pkg-config --libs yaml-0.1)
+
+# If needed: Explicit HDF5 linker support
+#LDFLAGS += $(shell pkg-config --libs-only-L hdf5)
+#LIBS += $(shell pkg-config --libs-only-l hdf5)
 
 # Get compile flags based on target macros.
 ifdef REPRO

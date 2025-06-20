@@ -96,6 +96,8 @@ CPPDEFS += -DHAVE_SCHED_GETAFFINITY -DHAVE_GETTID
 FPPFLAGS := -fpp -Wp,-w $(INCLUDES)
 # Fortran Compiler flags for the NetCDF library
 FPPFLAGS += $(shell nf-config --fflags)
+# HDF5
+FPPFLAGS += $(shell pkg-config --cflags hdf5)
 
 # Base set of Fortran compiler flags
 FFLAGS := -g -traceback -fno-alias -auto -safe-cray-ptr -ftz -assume byterecl -i4 $(REAL_PRECISION) -nowarn -sox
@@ -126,6 +128,8 @@ FFLAGS_COVERAGE = -prof-gen=srcpos
 CPPFLAGS := -D__IFC $(INCLUDES)
 # C Compiler flags for the NetCDF library
 CPPFLAGS += $(shell nc-config --cflags)
+# HDF5
+CPPFLAGS += $(shell pkg-config --cflags hdf5)
 
 # Base set of C compiler flags
 CFLAGS := -sox -traceback
@@ -153,6 +157,10 @@ LDFLAGS_COVERAGE = -prof-gen=srcpos
 
 # List of -L library directories to be added to the compile and linking commands
 LIBS := $(shell pkg-config --libs yaml-0.1)
+
+# (Temporary) HDF5 linker support
+LDFLAGS += $(shell pkg-config --libs-only-L hdf5)
+LIBS += $(shell pkg-config --libs-only-l hdf5)
 
 # Get compile flags based on target macros.
 ifdef REPRO
