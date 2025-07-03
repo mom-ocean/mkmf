@@ -158,9 +158,12 @@ LDFLAGS_COVERAGE = -prof-gen=srcpos
 # List of -L library directories to be added to the compile and linking commands
 LIBS := $(shell pkg-config --libs yaml-0.1)
 
-# (Temporary) HDF5 linker support
-LDFLAGS += $(shell pkg-config --libs-only-L hdf5)
-LIBS += $(shell pkg-config --libs-only-l hdf5)
+# Manually apply netCDF library paths as RPATHs
+LIBS += $(shell pkg-config --libs-only-L netcdf | sed 's/-L/-Wl,-rpath,/g')
+
+## (Temporary) HDF5 linker support
+#LDFLAGS += $(shell pkg-config --libs-only-L hdf5)
+#LIBS += $(shell pkg-config --libs-only-l hdf5)
 
 # Get compile flags based on target macros.
 ifdef REPRO

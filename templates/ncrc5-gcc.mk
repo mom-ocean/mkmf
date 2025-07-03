@@ -100,8 +100,8 @@ FFLAGS_REPRO =
 
 # In HDF5 1.14.3, certain operations trigger floating point exceptions.
 #   Until resolved, we must temporarily disable them.
-#FFLAGS_DEBUG = -O0 -W -fbounds-check -ffpe-trap=invalid,zero,overflow
-FFLAGS_DEBUG = -O0 -W -fbounds-check
+FFLAGS_DEBUG = -O0 -W -fbounds-check -ffpe-trap=invalid,zero,overflow
+#FFLAGS_DEBUG = -O0 -W -fbounds-check
 
 # Flags to add additional build options
 FFLAGS_OPENMP = -fopenmp
@@ -140,9 +140,8 @@ LDFLAGS_COVERAGE :=
 # List of -L library directories to be added to the compile and linking commands
 LIBS := $(shell pkg-config --libs yaml-0.1)
 
-# If needed: Explicit HDF5 linker support
-#LDFLAGS += $(shell pkg-config --libs-only-L hdf5)
-#LIBS += $(shell pkg-config --libs-only-l hdf5)
+# Manually apply netCDF library paths as RPATHs
+LIBS += $(shell pkg-config --libs-only-L netcdf | sed 's/-L/-Wl,-rpath,/g')
 
 # Get compile flags based on target macros.
 ifdef REPRO
